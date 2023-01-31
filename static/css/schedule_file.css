@@ -1,0 +1,12 @@
+.mystyle {
+    border-collapse: collapse;
+    margin: 25px 0;
+    font-size: 0.9em;
+    font-family: sans-serif;
+    min-width: 400px;
+}
+.mystyle thead tr {
+    background-color: #009879;
+    color: #ffffff;
+    text-align: left;
+}
