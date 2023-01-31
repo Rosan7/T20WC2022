@@ -16,4 +16,4 @@
 # The best plays of the world cup 2022(v)
 # Top dismissals of t20 wc(v)
 # best bowling figures t20 wc
-# About the T20 wc 2022 venue host cities etc ..(wiki) + icc 
+# About the T20 wc 2022 venue host cities etc ..(wiki)
