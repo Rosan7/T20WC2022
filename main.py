@@ -17,19 +17,58 @@ import pandas as pd
 from IPython.display import HTML
 import plotly.express as px
 import plotly.io as pio
+import numpy as np
 from plotly.offline import plot
 from plotly.graph_objs import Scatter
 from flask import Markup
+
 pio.templates.default = "plotly_white"
 
-data = pd.read_csv("t20 world cup 22.csv")
-
-
+data = pd.read_csv("t20-world-cup-22.csv")
+login_manager = LoginManager()
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///new_users.db"
+#Optional: But it will silence the deprecation warning in the console.
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.secret_key = "super secret key"
+db = SQLAlchemy(app)
+# login_manager.init_app(app)
+
+##CREATE TABLE
+class Userwc(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(250), unique=True, nullable=False)
+    email = db.Column(db.String(250), nullable=False)
+    password = db.Column(db.String(250), nullable=False)
+
+db.create_all()
+
+
 df = pd.read_csv("t20-world-cup-22.csv", index_col=False)
 arr = []
-links = ['https://2022.t20worldcup.com/video/2853918']
+
+
+def make_clickable(url, name):
+    return '<a href="{}" rel="noopener noreferrer" target="_blank">{}</a>'.format(url, name)
+
+
+links = ['https://2022.t20worldcup.com/video/2866929', 'https://2022.t20worldcup.com/video/2867782',
+         'https://2022.t20worldcup.com/video/2869237', 'https://2022.t20worldcup.com/video/2869705',
+         'https://2022.t20worldcup.com/video/2872860', 'https://2022.t20worldcup.com/video/2873203',
+         'https://2022.t20worldcup.com/video/2874701', 'https://2022.t20worldcup.com/video/2875333', '',
+         'https://2022.t20worldcup.com/video/2878787', 'https://2022.t20worldcup.com/video/2876885',
+         'https://2022.t20worldcup.com/video/2877363', '', '', 'https://2022.t20worldcup.com/video/2879430',
+         'https://2022.t20worldcup.com/video/2882736', 'https://2022.t20worldcup.com/video/2882978',
+         'https://2022.t20worldcup.com/video/2883589', 'https://2022.t20worldcup.com/video/2885258',
+         'https://2022.t20worldcup.com/video/2886225', 'https://2022.t20worldcup.com/video/2886530',
+         'https://2022.t20worldcup.com/video/2887489', 'https://2022.t20worldcup.com/video/2887882',
+         'https://2022.t20worldcup.com/video/2889101', 'https://2022.t20worldcup.com/video/2890159',
+         'https://2022.t20worldcup.com/video/2890570', 'https://2022.t20worldcup.com/video/2891571',
+         'https://2022.t20worldcup.com/video/2893962', 'https://2022.t20worldcup.com/video/2894158',
+         'https://2022.t20worldcup.com/video/2894422', 'https://2022.t20worldcup.com/video/2899838',
+         'https://2022.t20worldcup.com/video/2901048', 'https://2022.t20worldcup.com/video/2907679']
+# df['highlights'] = df.apply(lambda x: make_clickable(x['links'], x['names']), axis=1)
+
 for index, row in df.iterrows():
     winner = row["winner"]
     if row["won by"] == "Runs":
@@ -43,34 +82,62 @@ for index, row in df.iterrows():
     else:
         arr.append("No Result")
 df["Result"] = arr
-@app.route('/signup',methods=['POST'])
-def signup():
-    if request.method == 'POST':
-        name = request.form['name']
-        email = request.form['email']
-        password = request.form['password']
-        new_user = User(
-            name=name,
-            email=email,
-            password=password
+df["Highlights"] = links
+HTML(df.to_html(render_links=True, escape=False))
+
+@app.route('/')
+def home():
+    # Every render_template has a logged_in variable set
+    return render_template("index.html")
+
+
+@app.route('/register', methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+
+        if Userwc.query.filter_by(email=request.form.get('email')).first():
+            # User already exists
+            # print("You've already signed up with that email, log in instead!")
+            # flash("You've already signed up with that email, log in instead!")
+            return "User added already"
+            # return redirect(url_for('login'))
+        new_user = Userwc(
+            email=request.form.get('email'),
+            name=request.form['name'],
+            password=request.form['password']
         )
         db.session.add(new_user)
         db.session.commit()
-        return "User signed up successfully"
+        # Log in and authenticate user after adding details to database
+        return redirect(url_for('home'))
+    return render_template("register.html")
 
 
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
-        user = User.query.filter_by(email=email).first()
-        if user is not None and user.check_password(password):
-            login_user(user)
-            return redirect(url_for('index'))
+    if request.method == "POST":
+        email = request.form.get('email')
+        password = request.form.get('password')
+
+        # Finding user by email entered
+        user = Userwc.query.filter_by(email=email).first()
+        # Email does n't exist
+        if not user:
+            # flash("That email does not exist, please try again.")
+            print("email bhul")
+            return redirect(url_for('login'))
+        # Password Incorrect
+        elif not user.password == password:
+            # flash("Password Incorrect, Please Try again.")
+            print("password bhul")
+            return redirect(url_for('login'))
+        # email exists and password is correct for the given email
         else:
-            flash('Invalid username or password')
-    return render_template('login.html')
+            return redirect(url_for('home'))
+
+    return render_template("login.html")
+
+
 
 @app.route('/schedule')
 def schedule():
@@ -84,7 +151,7 @@ def schedule():
       <style> 
          bal
          {{
-            width: 100%;
+            width: 80%;
          }}
          table.a
           {{
@@ -147,33 +214,8 @@ def schedule():
 
 @app.route('/get_details')
 def get_details_about_match():
-    # form = CreateMatchForm()
-    # if form.validate_on_submit():
-    first_team = "India"
-    second_team = "England"
-    # Check if user's email address already exists
-    # if User.query.filter_by(email=form.email.data).first:
-    #     # Send flash message
-    #     flash("You've already signed up with that email, log in instead!")
-    #     # Redirect to /login route.
-    #     return redirect(url_for('login'))
-    # hash_and_salted_password = generate_password_hash(
-    #     form.password.data,
-    #     method='pbkdf2:sha256',
-    #     salt_length=8
-    # )
-    # new_user = User(
-    #     email=form.email.data,
-    #     name=form.name.data,
-    #     password=hash_and_salted_password
-    # )
-    #
-    # db.session.add(new_user)
-    # db.session.commit()
-    #
-    # # This line will authenticate the users with Flask login
-    # login_user(new_user)
-    # return redirect(url_for("get_all_posts"))
+    first_team = request.form["team1"]
+    second_team = request.form["team2"]
 
     result = df.query(
         "(team1 == @first_team and team2 == @second_team) or team1 == @second_team and team2 == @first_team")
@@ -181,7 +223,8 @@ def get_details_about_match():
     team1 = list(result.get('team1'))[0]
     team2 = list(result.get('team2'))[0]
     stage = list
-    if seriees[0] != "No Result" and list(result.get('stage'))[0] != 'Final':
+    if seriees[0] != "No Result" and list(result.get('stage'))[0] != 'Final' and list(result.get('stage'))[
+        0] != 'Semi-final':
 
         venue = list(result.get('venue'))[0]
         toss_won = list(result.get('toss winner'))[0]
@@ -193,14 +236,93 @@ def get_details_about_match():
                  "emerged " \
                  "victorious at the end. "
 
-        return render_template(f"{team1}vs{team2}.html", answer=answer, link=link)
-    elif seriees[0] != "No Result":
+        title = f"{team1} vs {team2}"
+        team1 = "".join(team1.split())
+        team2 = "".join(team2.split())
+
+        html_string = '''
+                <html>
+                  <head>
+                  <title>Super 12</title>
+                  <style> 
+                    body {
+                    background-color : #00ffff;
+                     }
+                 div.text-article {
+                    display: flex;
+                    color: #000;
+                    display: block;
+                    width: 100%;
+                    font-size: 4em;
+                    font-size: 40px
+        
+                  }
+        
+        
+                  div.text-article:first-letter {
+                    color: green;
+                    float:center;
+                    font-weight: bold;
+                    font-size: 60px;
+                    font-size: 6rem;
+                    line-height: 40px;
+                    line-height: 4rem;
+                    height:4rem;
+                    text-transform: uppercase;
+                  }
+        
+        
+                  img.center {
+                      display: block;
+                      margin-left: auto;
+                      margin-right: auto;
+                      width: 40%;
+                      height: 50%
+                  }
+                  h1 {
+                  text-align: center;
+                  font-size: 80px;
+                  
+                  }
+                  p {
+                  margin-left : 15%;
+                  margin-right: 15%;
+                  font-family: arial;
+                  font-size: 50px;
+                  color: white;
+                  }
+
+                  </style>
+                  </head>
+                  <body>
+                     
+                      <h1>{{title}}</h1>
+                
+                      <p align="center"> {{ answer }} </p>
+                      <p align="right"><a href={{link}}>Watch the highlights</a></p>
+                     
+                    
+                  </body>
+                </html>.
+                '''
+        link = list(result["Highlights"])[0]
+        print(type(link))
+        with open(f'templates/{team1}vs{team2}.html', 'w') as f:
+            f.write(html_string)
+        return render_template(f"{team1}vs{team2}.html", answer=answer, link=link, title=title)
+    elif seriees[0] != "No Result" and list(result.get('stage'))[0] != 'Semi-final':
         return redirect(url_for('final'))
+    elif list(result.get('stage'))[0] == 'Semi-final':
+        return redirect(url_for('semi_finale'))
+    else:
+        return redirect(url_for('get_details'))
 
 
 @app.route('/final')
 def final():
     result = df.query("stage == 'Final'")
+    team1 = list(result.get('team1'))[0]
+    team2 = list(result.get('team2'))[0]
     seriees = list(result["Result"])
     venue = list(result.get('venue'))[0]
     toss_won = list(result.get('toss winner'))[0]
@@ -229,43 +351,372 @@ def final():
                  "better and " \
                  "emerged " \
                  "victorious at the end ."
-    return render_template("winner.html", answer=answer, link=link)
+    title = f"{team1} vs {team2}"
+    team1 = "".join(team1.split())
+    team2 = "".join(team2.split())
+
+    html_string = '''
+                    <html>
+                      <head>
+                      <title>Final Showdown</title>
+                      <style> 
+                        body {
+                        background-color : #00ffff;
+                         }
+                     div.text-article {
+                        display: flex;
+                        color: #000;
+                        display: block;
+                        width: 100%;
+                        font-size: 4em;
+                        font-size: 40px
+
+                      }
 
 
-@app.route('/semi_finale')
-def semi_finale():
-    def make_clickable(url, name):
-        return '<a href="{}" rel="noopener noreferrer" target="_blank">{}</a>'.format(url, name)
+                      div.text-article:first-letter {
+                        color: green;
+                        float:center;
+                        font-weight: bold;
+                        font-size: 60px;
+                        font-size: 6rem;
+                        line-height: 40px;
+                        line-height: 4rem;
+                        height:4rem;
+                        text-transform: uppercase;
+                      }
 
-    result = df.query("stage == 'Semi-final'")
-    link1 = render_template("semi-final1.html", links_semf[0])
-    link2 = render_template("semi-final2.html", links_semf[1])
-    links_semf = [links[-3], links[-2]]
-    result["links"] = links_semf
-    new_df = result[["venue", "stage", "team1", "team2", "Result", "links"]]
-    semi_finale_matches = []
-    count = 0
-    for index, value in result.iterrows():
-        teama = result["team1"]
-        teamb = result["team2"]
-        semi_finale_matches.append("teama vs teamb")
-        link = render_template(f"{teama}vs{teamb}.html", link=link[count])
-        count += 1
 
-    new_df["names"] = semi_finale_matches
-    HTML(new_df.to_html(render_links=True, escape=False))
+                      img.center {
+                          display: block;
+                          margin-left: auto;
+                          margin-right: auto;
+                          width: 40%;
+                          height: 50%
+                      }
+                      h1 {
+                      text-align: center;
+                      font-size: 80px;
 
-    new_df['highlights'] = new_df.apply(lambda x: make_clickable(x['links'], x['names']), axis=1)
+                      }
+                      p {
+                      margin-left : 15%;
+                      margin-right: 15%;
+                      font-family: arial;
+                      font-size: 50px;
+                      color: white;
+                      }
+
+                      </style>
+                      </head>
+                      <body>
+
+                          <h1>{{title}}</h1>
+
+                          <p align="center"> {{ answer }} </p>
+                          <p align="right"><a href={{link}}>Watch the highlights</a></p>
+
+
+                      </body>
+                    </html>.
+                    '''
+    link = list(result["Highlights"])[0]
+    with open('templates/Final.html', 'w') as f:
+        f.write(html_string)
+    return render_template("Final.html", answer=answer, link=link,title=title)
+
+
+@app.route('/semi_final1')
+def semi_final1():
+    team1 = "New Zealand"
+    team2 = "Pakistan"
+    pd.set_option('colheader_justify', 'center')
+    result = df.query(
+        "(team1 == @team1 and team2 == @team2) or team1 == @team2 and team2 == @team1")
+    seriees = list(result["Result"])
+
+    venue = list(result.get('venue'))[0]
+    toss_won = list(result.get('toss winner'))[0]
+    decision = list(result.get('toss decision'))[0]
+    team_won = list(result.get('winner'))[0]
+    answer = f"{seriees[0]} . The Semi-Finale match took place in {venue} . {toss_won} won the toss and chose to {decision} first." \
+             "It was a great performance from both sides but the winning team could adjust to the conditions " \
+             "better and " \
+             "emerged " \
+             "victorious at the end. "
+
+    title = f"{team1} vs {team2}"
+    team1 = "".join(team1.split())
+    team2 = "".join(team2.split())
+
+    html_string = '''
+                <html>
+                  <head>
+                  <title>Semi Finale 1</title>
+                  <style> 
+                    body {
+                    background-color : #00ffff;
+                     }
+                 div.text-article {
+                    display: flex;
+                    color: #000;
+                    display: block;
+                    width: 100%;
+                    font-size: 4em;
+                    font-size: 40px
+
+                  }
+
+
+                  div.text-article:first-letter {
+                    color: green;
+                    float:center;
+                    font-weight: bold;
+                    font-size: 60px;
+                    font-size: 6rem;
+                    line-height: 40px;
+                    line-height: 4rem;
+                    height:4rem;
+                    text-transform: uppercase;
+                  }
+
+
+                  img.center {
+                      display: block;
+                      margin-left: auto;
+                      margin-right: auto;
+                      width: 40%;
+                      height: 50%
+                  }
+                  h1 {
+                  text-align: center;
+                  font-size: 80px;
+
+                  }
+                  p {
+                  margin-left : 15%;
+                  margin-right: 15%;
+                  font-family: arial;
+                  font-size: 3rem;
+                  color: white;
+                  }
+
+                  </style>
+                  </head>
+                  <body>
+
+                      <h1>{{title}}</h1>
+
+                      <p align="center"> {{ answer }} </p>
+                      <p align="right"><a href={{link}}>Watch the highlights</a></p>
+
+
+                  </body>
+                </html>.
+                '''
+    link = list(result["Highlights"])[0]
+    print(type(link))
+    with open(f'templates/Semi-final1.html', 'w') as f:
+        f.write(html_string)
+    return render_template(f"Semi-final1.html", answer=answer, link=link, title=title)
+
+
+@app.route('/semi_final2')
+def semi_final2():
+    team1 = "England"
+    team2 = "India"
+    pd.set_option('colheader_justify', 'center')
+    result = df.query(
+        "(team1 == @team1 and team2 == @team2) or team1 == @team2 and team2 == @team1")
+    seriees = list(result["Result"])
+
+    venue = list(result.get('venue'))[0]
+    toss_won = list(result.get('toss winner'))[0]
+    decision = list(result.get('toss decision'))[0]
+    team_won = list(result.get('winner'))[0]
+    answer = f"{seriees[0]} . The Semi-Finale match took place in {venue} . {toss_won} won the toss and chose to {decision} first." \
+             "It was a great performance from both sides but the winning team could adjust to the conditions " \
+             "better and " \
+             "emerged " \
+             "victorious at the end. "
+
+    title = f"{team1} vs {team2}"
+    team1 = "".join(team1.split())
+    team2 = "".join(team2.split())
+
+    html_string = '''
+                <html>
+                  <head>
+                  <title>Semi Finale 1</title>
+                  <style> 
+                    body {
+                    background-color : #00ffff;
+                     }
+                 div.text-article {
+                    display: flex;
+                    color: #000;
+                    display: block;
+                    width: 100%;
+                    font-size: 4em;
+                    font-size: 40px
+
+                  }
+
+
+                  div.text-article:first-letter {
+                    color: green;
+                    float:center;
+                    font-weight: bold;
+                    font-size: 60px;
+                    font-size: 6rem;
+                    line-height: 40px;
+                    line-height: 4rem;
+                    height:4rem;
+                    text-transform: uppercase;
+                  }
+
+
+                  img.center {
+                      display: block;
+                      margin-left: auto;
+                      margin-right: auto;
+                      width: 40%;
+                      height: 50%
+                  }
+                  h1 {
+                  text-align: center;
+                  font-size: 80px;
+
+                  }
+                  p {
+                  margin-left : 15%;
+                  margin-right: 15%;
+                  font-family: arial;
+                  font-size: 3rem;
+                  color: white;
+                  }
+
+                  </style>
+                  </head>
+                  <body>
+
+                      <h1>{{title}}</h1>
+
+                      <p align="center"> {{ answer }} </p>
+                      <p align="right"><a href={{link}}>Watch the highlights</a></p>
+
+
+                  </body>
+                </html>.
+                '''
+    link = list(result["Highlights"])[0]
+    print(type(link))
+    with open(f'templates/Semi-final2.html', 'w') as f:
+        f.write(html_string)
+    return render_template(f"Semi-final2.html", answer=answer, link=link, title=title)
+
+
+@app.route("/get_best_player")
+def get_tournament_best_player():
+    # OUTPUT AN HTML FILE
+    return render_template("best-player.html")
+
+
+@app.route("/get_best_batsman")
+def get_best_batsman():
+    pio.templates.default = "plotly_white"
+
+    df = pd.read_csv("t20-world-cup-22.csv")
+    # print(df.head(10))
+    # Number of teams in team1,team2S
+    print(np.unique(df[["team1", "team2"]].values))
+    # Top scorer in T20 world cup
+    figure = px.bar(df,
+                    x=df["top scorer"],
+                    y=df["highest score"],
+                    color=df["highest score"],
+                    title="Top Scorers in t20 World Cup 2022")
+    figure.show()
+    return render_template("best-batsman.html")
+
+
+@app.route("/get_best_bowler")
+def get_best_bowler():
+
+    return render_template("best-bowler.html")
+
+
+@app.route("/get_most_runs_by_a_batsman")
+def get_most_scored_batsman():
+    most_runs = 0
+
+    for index, row in df.iterrows():
+        if row["highest score"] and (row["highest score"]) > most_runs:
+            most_runs = int(row["highest score"])
+            batsman = row["top scorer"]
+    score = 0
+    batsmen = {}
+    for index, row in df.iterrows():
+
+        try:
+
+            score = int(row["highest score"])
+
+        except:
+            score = 0
+        batsman = row["top scorer"]
+
+        if batsman not in batsmen and type(batsman) == str:
+            batsmen[batsman] = score
+
+
+        elif batsman in batsmen:
+            batsmen[batsman] = max(score, batsmen[batsman])
+
+    return jsonify({"batsman":batsman,"score":score})
+
+# @app.route("/get_best_wicket_stats")
+def get_best_wicket_stats():
+    max_wickets = 0
+    calender = {"Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6, "July": 7, "Aug": 8, "Sep": 9, "Oct": 10,
+                "Nov": 11, "Dec": 12}
+    bowlers = {}
+    for index, row in df.iterrows():
+
+        try:
+
+            wickets = int(row["best bowling figure"][0:2])
+        except TypeError:
+            wickets = wickets
+        except:
+            wickets = calender[row["best bowling figure"][0:3]]
+
+        if wickets > max_wickets:
+
+            max_wickets = wickets
+            player = row["best bowler"]
+            if player not in bowlers:
+                bowlers[player] = max_wickets
+            if player in bowlers:
+                if bowlers[player] > max_wickets:
+                    bowlers[player] = max_wickets
+    print(bowlers)
+
+@app.route("/my_team/<string:name>/")
+def get_all_matches_played(name):
+    team = name
+    result = df.query("team1 == @team or team2 == @team")
+    result_df = result[["venue", "stage", "team1", "team2", "Result"]]
     pd.set_option('colheader_justify', 'center')  # FOR TABLE <th>
 
     html_string = '''
         <html>
           <head>
-          <title>Semi-Finals</title>
+          <title>Matches played by your country</title>
           <style> 
              bal
              {{
-                width: 100%;
+                width: 80%;
              }}
              table.a
               {{
@@ -310,7 +761,7 @@ def semi_finale():
             <img src="static/img/t20_logo.jpg" width=90%>
             </td>
             <td>
-            <h1 align="center">Fixtures of Semi Finale T20 World Cup 2022</h1>
+            <h1 align="center">Fixtures of Your Team</h1>
             </td>
             </table>
             </div>
@@ -320,82 +771,21 @@ def semi_finale():
         '''
 
     # OUTPUT AN HTML FILE
-    with open('templates/semi-finale.html', 'w') as f:
-        f.write(html_string.format(table=new_df.to_html()))
+    with open('templates/scheduleteam.html', 'w') as f:
+        f.write(html_string.format(table=result_df.to_html()))
 
-    return render_template("semi-finale.html", link=links_semf)
+    return render_template("scheduleteam.html")
 
-    # if seriees[0] != "No Result":
-    #     venue = list(result.get('venue'))[0]
-    #     toss_won = list(result.get('toss winner'))[0]
-    #     decision = list(result.get('toss decision'))[0]
-    #     team_won = list(result.get('winner'))[0]
-    #     answer = f"{seriees[0]} . The match took place in {venue} . {toss_won} won the toss and chose to {decision} first." \
-    #              "It was a great performance from both sides but the winning team could adjust to the conditions " \
-    #              "better and " \
-    #              "emerged " \
-    #              "victorious at the end. "
-    #
-    #     return render_template("get_results.html", answer=answer, link=link)
-
-
-@app.route("/get_best_player")
-def get_tournament_best_player():
-    # OUTPUT AN HTML FILE
-    return render_template("best-player.html")
-
-
-@app.route("/get_best_batsman")
-def get_best_batsman():
-    return render_template("best-batsman.html")
-
-
-@app.route("/get_best_bowler")
-def get_best_bowler():
-    return render_template("best-bowler.html")
-
-
-@app.route("/get_most_runs_by_a_batsman")
-def get_most_scored_batsman():
-    most_runs = 0
-
-    for index, row in df.iterrows():
-        if row["highest score"] and (row["highest score"]) > most_runs:
-            most_runs = int(row["highest score"])
-            batsman = row["top scorer"]
-
-
-# @app.route("/get_best_wicket_stats")
-def get_best_wicket_stats():
-    max_wickets = 0
-    calender = {"Jan":1,"Feb":2,"Mar":3,"Apr":4,"May":5,"Jun":6,"July":7,"Aug":8,"Sep":9,"Oct":10,"Nov":11,"Dec":12}
-    for index, row in df.iterrows():
-
-        try:
-
-            wickets = int(row["best bowling figure"][0:2])
-        except TypeError:
-            wickets = wickets
-        except:
-            wickets = calender[row["best bowling figure"][0:3]]
-
-        if wickets > max_wickets:
-            max_wickets = wickets
-            player = row["best bowler"]
-def get_all_matches_played():
-    team = request.args.get("team")
-    result = df.query("team1 == @team or team2 == @team")
-    result_df = result[["venue", "stage", "team1", "team2", "Result"]]
-    # will be done after up is done
+@app.route('/about')
 def about():
+    return redirect('https://en.wikipedia.org/wiki/2022_ICC_Men%27s_T20_World_Cup')
 
-    figure = px.bar(data,
-                    x=data["winner"],
-                    title="Number of Matches Won by teams in t20 World Cup 2022")
+@app.route('/venues')
+def venues():
+    return redirect('https://2022.t20worldcup.com/venues')
+@app.route('/logout')
+def logout():
+    return redirect(url_for('home'))
 
-    return render_template("best-player.html",)
-
-
-
-# if __name__ == "__main__":
-#     app.run(debug=True)
+if __name__ == "__main__":
+    app.run(debug=True)
