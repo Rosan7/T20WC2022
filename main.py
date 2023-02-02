@@ -212,10 +212,10 @@ def schedule():
     return render_template("schedule.html")
 
 
-@app.route('/get_details')
-def get_details_about_match():
-    first_team = request.form["team1"]
-    second_team = request.form["team2"]
+@app.route('/<string:team1>vs<string:team2>')
+def get_details_about_match(team1,team2):
+    first_team = team1
+    second_team = team2
 
     result = df.query(
         "(team1 == @first_team and team2 == @second_team) or team1 == @second_team and team2 == @first_team")
@@ -313,9 +313,10 @@ def get_details_about_match():
     elif seriees[0] != "No Result" and list(result.get('stage'))[0] != 'Semi-final':
         return redirect(url_for('final'))
     elif list(result.get('stage'))[0] == 'Semi-final':
-        return redirect(url_for('semi_finale'))
-    else:
-        return redirect(url_for('get_details'))
+        if team1 == "India" or "team2" == "India":
+            return redirect(url_for('semi_final2'))
+        else:
+            return redirect(url_for('semi_final1'))
 
 
 @app.route('/final')
@@ -771,10 +772,10 @@ def get_all_matches_played(name):
         '''
 
     # OUTPUT AN HTML FILE
-    with open('templates/scheduleteam.html', 'w') as f:
+    with open(f'templates/scheduleteam{name}.html', 'w') as f:
         f.write(html_string.format(table=result_df.to_html()))
 
-    return render_template("scheduleteam.html")
+    return render_template(f"scheduleteam{name}.html")
 
 @app.route('/about')
 def about():
